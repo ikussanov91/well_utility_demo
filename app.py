@@ -707,34 +707,41 @@ def update_chart(well, events, date_range, dark_mode):
         event_date = pd.to_datetime(e['date'])
         
         # Only show event if date is within view range
-        if dff['date'].min() <= event_date <= dff['date'].max():
-            # Use datetime object directly for Plotly
-            x_pos = event_date
-            
-            # 1. Dashed Line
-            fig.add_vline(
-                x=x_pos, 
-                line_width=1, line_dash="dash", line_color=theme['text'], opacity=0.5
-            )
-            
-            # 2. Author Badge Annotation
-            disc = e.get('discipline', 'Unknown')
-            color = DISCIPLINE_COLORS.get(disc, '#6c757d')
-            
-            # Stagger text to avoid overlap
-            y_pos = y_positions[i % len(y_positions)]
-            
-            fig.add_annotation(
-                x=x_pos, y=y_pos, yref='paper',
-                text=f"<b>{e['type']}</b><br><span style='font-size:10px'>{e.get('author', '')}</span>",
-                showarrow=False,
-                bgcolor=color,
-                bordercolor=color,
-                borderwidth=1,
-                borderpad=4,
-                font=dict(color='white', size=11),
-                align="center"
-            )
+        # Ensure proper datetime comparison
+        try:
+            date_min = pd.to_datetime(dff['date'].min())
+            date_max = pd.to_datetime(dff['date'].max())
+            if date_min <= event_date <= date_max:
+                # Use datetime object directly for Plotly
+                x_pos = event_date
+                
+                # 1. Dashed Line
+                fig.add_vline(
+                    x=x_pos, 
+                    line_width=1, line_dash="dash", line_color=theme['text'], opacity=0.5
+                )
+                
+                # 2. Author Badge Annotation
+                disc = e.get('discipline', 'Unknown')
+                color = DISCIPLINE_COLORS.get(disc, '#6c757d')
+                
+                # Stagger text to avoid overlap
+                y_pos = y_positions[i % len(y_positions)]
+                
+                fig.add_annotation(
+                    x=x_pos, y=y_pos, yref='paper',
+                    text=f"<b>{e['type']}</b><br><span style='font-size:10px'>{e.get('author', '')}</span>",
+                    showarrow=False,
+                    bgcolor=color,
+                    bordercolor=color,
+                    borderwidth=1,
+                    borderpad=4,
+                    font=dict(color='white', size=11),
+                    align="center"
+                )
+        except (TypeError, AttributeError):
+            # Skip this event if there's a type mismatch
+            continue
     
     fig.update_layout(
         title=f"Production Overview: {well}",
