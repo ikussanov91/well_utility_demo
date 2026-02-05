@@ -516,15 +516,13 @@ def register_event(n_clicks, well, date, w_type, user, action, status, depth, co
     if not n_clicks:
         return current_data, ""
     
-    # Validation
-    if not depth:
-        depth = 0 # Default if not provided or N/A
-    
-    # Convert depth to float if present
+    # Validation and convert depth to float
     try:
         if depth:
-            d = float(depth)
-    except:
+            depth = float(depth)
+        else:
+            depth = 0 # Default if not provided or N/A
+    except (ValueError, TypeError):
         return current_data, "❌ Error: Invalid depth format."
 
     if not comment:
@@ -647,6 +645,20 @@ def update_chart(well, events, date_range, dark_mode):
     start_idx, end_idx = date_range
     dff = dff.iloc[start_idx:end_idx+1]
     
+    # Check if dataframe is empty after slicing
+    if dff.empty:
+        # Return empty figure with message
+        theme = THEMES['dark'] if dark_mode else THEMES['light']
+        fig = go.Figure()
+        fig.update_layout(
+            title=f"Production Overview: {well} - No Data Available",
+            title_font_color=theme['text'],
+            plot_bgcolor=theme['card_bg'],
+            paper_bgcolor=theme['card_bg'],
+            template="plotly_dark" if dark_mode else "plotly_white"
+        )
+        return fig
+    
     # Theme settings
     theme = THEMES['dark'] if dark_mode else THEMES['light']
     grid_color = "#555" if dark_mode else "#eee"
@@ -695,33 +707,41 @@ def update_chart(well, events, date_range, dark_mode):
         event_date = pd.to_datetime(e['date'])
         
         # Only show event if date is within view range
-        if dff['date'].min() <= event_date <= dff['date'].max():
-            x_pos = event_date.timestamp() * 1000
-            
-            # 1. Dashed Line
-            fig.add_vline(
-                x=x_pos, 
-                line_width=1, line_dash="dash", line_color=theme['text'], opacity=0.5
-            )
-            
-            # 2. Author Badge Annotation
-            disc = e.get('discipline', 'Unknown')
-            color = DISCIPLINE_COLORS.get(disc, '#6c757d')
-            
-            # Stagger text to avoid overlap
-            y_pos = y_positions[i % len(y_positions)]
-            
-            fig.add_annotation(
-                x=x_pos, y=y_pos, yref='paper',
-                text=f"<b>{e['type']}</b><br><span style='font-size:10px'>{e.get('author', '')}</span>",
-                showarrow=False,
-                bgcolor=color,
-                bordercolor=color,
-                borderwidth=1,
-                borderpad=4,
-                font=dict(color='white', size=11),
-                align="center"
-            )
+        # Ensure proper datetime comparison
+        try:
+            date_min = pd.to_datetime(dff['date'].min())
+            date_max = pd.to_datetime(dff['date'].max())
+            if date_min <= event_date <= date_max:
+                # Use datetime object directly for Plotly
+                x_pos = event_date
+                
+                # 1. Dashed Line
+                fig.add_vline(
+                    x=x_pos, 
+                    line_width=1, line_dash="dash", line_color=theme['text'], opacity=0.5
+                )
+                
+                # 2. Author Badge Annotation
+                disc = e.get('discipline', 'Unknown')
+                color = DISCIPLINE_COLORS.get(disc, '#6c757d')
+                
+                # Stagger text to avoid overlap
+                y_pos = y_positions[i % len(y_positions)]
+                
+                fig.add_annotation(
+                    x=x_pos, y=y_pos, yref='paper',
+                    text=f"<b>{e['type']}</b><br><span style='font-size:10px'>{e.get('author', '')}</span>",
+                    showarrow=False,
+                    bgcolor=color,
+                    bordercolor=color,
+                    borderwidth=1,
+                    borderpad=4,
+                    font=dict(color='white', size=11),
+                    align="center"
+                )
+        except (TypeError, AttributeError):
+            # Skip this event if there's a type mismatch
+            continue
     
     fig.update_layout(
         title=f"Production Overview: {well}",
@@ -753,6 +773,24 @@ def update_chart(well, events, date_range, dark_mode):
 def update_kpi_ribbon(well, events, dark_mode):
     # 1. Get Well Data
     dff = df_global[df_global['well'] == well].copy()
+    
+    # Check if dataframe has data
+    if dff.empty:
+        # Return empty KPI ribbon with default message
+        text_color = "#e0e0e0" if dark_mode else "#212529"
+        card_bg = "#2a2d3e" if dark_mode else "#ffffff"
+        border = "#444" if dark_mode else "#dee2e6"
+        card_style = {"backgroundColor": card_bg, "border": f"1px solid {border}", "color": text_color}
+        
+        return [
+            dbc.Col(dbc.Card([
+                dbc.CardBody([
+                    html.H6("No Data Available", className="card-subtitle mb-2 text-muted"),
+                    html.H3("N/A", style={"color": text_color, "fontWeight": "bold"}),
+                ])
+            ], style=card_style), width=12),
+        ]
+    
     last_row = dff.iloc[-1]
     last_week = dff.iloc[-7] if len(dff) > 7 else dff.iloc[0]
     
